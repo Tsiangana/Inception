@@ -2,38 +2,49 @@
 set -e
 
 DATA_DIR="/var/lib/mysql"
+INIT_MARKER="$DATA_DIR/.inception_initialized"
+SOCKET="/run/mysqld/mysqld.sock"
 
-if [ ! -d "$DATA_DIR/mysql" ]; then
+echo "Garantindo permissões corretas..."
+chown -R mysql:mysql "$DATA_DIR"
+
+if [ ! -f "$INIT_MARKER" ]; then
     echo "Inicializando banco de dados..."
-    mysql_install_db --user=mysql --ldata="$DATA_DIR"
-    
-    TEMP_SQL="/tmp/init.sql"
-    
-    # Criar banco de dados
-    echo "CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\`;" > $TEMP_SQL
-    
-    # Criar usuário com senha para localhost e %
-    echo "CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PASSWORD}';" >> $TEMP_SQL
-    echo "CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';" >> $TEMP_SQL
-    
-    # Garantir que usa mysql_native_password (não unix_socket)
-    echo "ALTER USER '${MYSQL_USER}'@'localhost' IDENTIFIED VIA mysql_native_password;" >> $TEMP_SQL
-    echo "SET PASSWORD FOR '${MYSQL_USER}'@'localhost' = PASSWORD('${MYSQL_PASSWORD}');" >> $TEMP_SQL
-    
-    # Dar privilégios
-    echo "GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'localhost';" >> $TEMP_SQL
-    echo "GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';" >> $TEMP_SQL
-    
-    # Configurar root
-    echo "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';" >> $TEMP_SQL
-    
-    echo "FLUSH PRIVILEGES;" >> $TEMP_SQL
-    
-    echo "Aplicando configurações iniciais..."
-    mysqld --user=mysql --bootstrap < $TEMP_SQL
-    rm -f $TEMP_SQL
-    
-    echo "Inicialização completa!"
+
+    if [ ! -d "$DATA_DIR/mysql" ]; then
+        echo "Criando arquivos do banco de dados..."
+        mariadb-install-db --user=mysql --ldata="$DATA_DIR"
+    fi
+
+    echo "Iniciando MariaDB temporário..."
+    mysqld --user=mysql --skip-networking --socket="$SOCKET" &
+    TEMP_PID=$!
+
+    echo "Aguardando MariaDB iniciar..."
+    for i in {1..60}; do
+        if mysqladmin --socket="$SOCKET" ping >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+
+    echo "Configurando users..."
+    mysql --socket="$SOCKET" -u root <<EOSQL
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PASSWORD}';
+CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
+GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
+FLUSH PRIVILEGES;
+EOSQL
+
+    echo "Encerrando MariaDB temporário..."
+    mysqladmin --socket="$SOCKET" -u root -p"${MYSQL_ROOT_PASSWORD}" shutdown || true
+    wait $TEMP_PID || true
+
+    touch "$INIT_MARKER"
+    echo "Inicialização concluída!"
 fi
 
 echo "Iniciando MariaDB..."
