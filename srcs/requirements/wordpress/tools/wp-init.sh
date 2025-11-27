@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+/usr/local/bin/init_wordpress.sh
+
 WP_PATH="/var/www/html"
 INIT_MARKER="$WP_PATH/.wordpress_installed"
 
@@ -13,7 +15,8 @@ if [ ! -f "$INIT_MARKER" ]; then
 
     # Esperar o MariaDB responder
     echo "⏳ Aguardando MariaDB..."
-    until mysql -h"$WORDPRESS_DB_HOST" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SHOW DATABASES;" >/dev/null 2>&1; do
+    until mysql -h"$WORDPRESS_DB_HOST" -P"${WORDPRESS_DB_PORT:-3306}" \
+      -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" >/dev/null 2>&1; do
         sleep 2
     done
     echo "🚀 Done Mariadb"
