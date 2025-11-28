@@ -3,11 +3,14 @@ services:
     build:
       context: ./srcs/requirements/mariadb
       dockerfile: Dockerfile
+    image: mariadb
     container_name: mariadb
+    pull_policy: never
     env_file:
       - ./srcs/.env
     volumes:
       - mariadb_data:/var/lib/mysql
+      - ./secrets:/run/secrets:ro
     networks:
       - inception
     restart: unless-stopped
@@ -21,7 +24,9 @@ services:
     build:
       context: ./srcs/requirements/wordpress
       dockerfile: Dockerfile
+    image: wordpress
     container_name: wordpress
+    pull_policy: never
     depends_on:
       mariadb:
         condition: service_healthy
@@ -32,6 +37,7 @@ services:
         WORDPRESS_DB_PORT: 3306
     volumes:
       - wordpress_data:/var/www/html
+      - ./secrets:/run/secrets:ro
     networks:
       - inception
     restart: unless-stopped
@@ -40,16 +46,18 @@ services:
     build:
       context: ./srcs/requirements/nginx
       dockerfile: Dockerfile
+    image: nginx
     container_name: nginx
+    pull_policy: never
     depends_on:
       - wordpress
     env_file:
       - ./srcs/.env
     ports:
-      - "80:80"
       - "443:443"
     volumes:
       - wordpress_data:/var/www/html:ro
+      - ./secrets:/run/secrets:ro
       - ./srcs/requirements/nginx/conf:/etc/nginx/conf.d:ro
     networks:
       - inception
@@ -58,8 +66,16 @@ services:
 volumes:
   mariadb_data:
     driver: local
+    driver_opts:
+      type: none
+      device: /home/pzau/data/mariadb
+      o: bind
   wordpress_data:
     driver: local
+    driver_opts:
+      type: none
+      device: /home/pzau/data/wordpress
+      o: bind
 
 networks:
   inception:

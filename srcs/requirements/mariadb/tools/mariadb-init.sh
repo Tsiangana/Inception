@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+# If secrets are provided as files (mounted to /run/secrets), prefer them
+SECRETS_DIR="/run/secrets"
+load_secret() {
+    local file="$SECRETS_DIR/$1"
+    local varname="$2"
+    if [ -z "${!varname}" ] && [ -f "$file" ]; then
+        export "$varname"="$(cat "$file")"
+    fi
+}
+
+# Common secrets
+load_secret "MYSQL_PASSWORD.txt" "MYSQL_PASSWORD"
+load_secret "MYSQL_ROOT_PASSWORD.txt" "MYSQL_ROOT_PASSWORD"
+load_secret "MYSQL_DATABASE.txt" "MYSQL_DATABASE"
+load_secret "MYSQL_USER.txt" "MYSQL_USER"
+
 DATA_DIR="/var/lib/mysql"
 INIT_MARKER="$DATA_DIR/.inception_initialized"
 SOCKET="/run/mysqld/mysqld.sock"

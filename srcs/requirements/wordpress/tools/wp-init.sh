@@ -1,6 +1,23 @@
 #!/bin/bash
 set -e
 
+# If secrets are provided as files (mounted to /run/secrets), prefer them
+SECRETS_DIR="/run/secrets"
+load_secret() {
+  local file="$SECRETS_DIR/$1"
+  local varname="$2"
+  if [ -z "${!varname}" ] && [ -f "$file" ]; then
+    export "$varname"="$(cat "$file")"
+  fi
+}
+
+load_secret "MYSQL_PASSWORD.txt" "MYSQL_PASSWORD"
+load_secret "MYSQL_ROOT_PASSWORD.txt" "MYSQL_ROOT_PASSWORD"
+load_secret "WP_ADMIN_PASSWORD.txt" "WP_ADMIN_PASSWORD"
+load_secret "WP_ADMIN_PASSWORD2.txt" "WP_ADMIN_PASSWORD2"
+load_secret "MYSQL_USER.txt" "MYSQL_USER"
+load_secret "MYSQL_DATABASE.txt" "MYSQL_DATABASE"
+
 /usr/local/bin/init_wordpress.sh
 
 WP_PATH="/var/www/html"
